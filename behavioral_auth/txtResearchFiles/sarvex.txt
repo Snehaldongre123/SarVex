@@ -1,0 +1,7 @@
+BehaviorAuth
+ 1.0.0 
+OAS 3.1
+/openapi.json
+Passwordless behavioral authentication API. No passwords — identity verified via typing, mouse, device, and context signals.
+
+Authorize
