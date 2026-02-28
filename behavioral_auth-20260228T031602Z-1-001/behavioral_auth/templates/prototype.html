@@ -1,0 +1,1511 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NeuralAuth — Behavioral Identity System</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #050810;
+    --surface: #0a0f1e;
+    --surface2: #0f1628;
+    --border: rgba(99,179,237,0.12);
+    --border-glow: rgba(99,179,237,0.35);
+    --accent: #63b3ed;
+    --accent2: #48bb78;
+    --accent3: #f6ad55;
+    --danger: #fc8181;
+    --text: #e2e8f0;
+    --text-muted: #718096;
+    --text-dim: #4a5568;
+    --glow: 0 0 40px rgba(99,179,237,0.15);
+    --glow-strong: 0 0 60px rgba(99,179,237,0.3);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'JetBrains Mono', monospace;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    overflow-x: hidden;
+    cursor: none;
+  }
+
+  /* Custom cursor */
+  #cursor {
+    width: 8px; height: 8px;
+    background: var(--accent);
+    border-radius: 50%;
+    position: fixed; pointer-events: none; z-index: 9999;
+    transition: transform 0.1s;
+    box-shadow: 0 0 10px var(--accent);
+  }
+  #cursor-ring {
+    width: 32px; height: 32px;
+    border: 1px solid rgba(99,179,237,0.4);
+    border-radius: 50%;
+    position: fixed; pointer-events: none; z-index: 9998;
+    transition: transform 0.15s, left 0.08s, top 0.08s;
+    transform: translate(-50%, -50%);
+  }
+
+  /* Animated background grid */
+  body::before {
+    content: '';
+    position: fixed; inset: 0; z-index: 0;
+    background-image:
+      linear-gradient(rgba(99,179,237,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(99,179,237,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    animation: gridShift 20s linear infinite;
+  }
+  @keyframes gridShift { to { background-position: 40px 40px; } }
+
+  /* Ambient orbs */
+  .orb {
+    position: fixed; border-radius: 50%; filter: blur(120px);
+    pointer-events: none; z-index: 0; opacity: 0.25;
+  }
+  .orb-1 { width: 500px; height: 500px; background: #1a4f7a; top: -100px; right: -100px; animation: orbFloat 8s ease-in-out infinite; }
+  .orb-2 { width: 400px; height: 400px; background: #1a4a2a; bottom: -100px; left: -100px; animation: orbFloat 10s ease-in-out infinite reverse; }
+  @keyframes orbFloat { 0%,100% { transform: translate(0,0); } 50% { transform: translate(30px, -30px); } }
+
+  /* Layout */
+  .layout {
+    position: relative; z-index: 1;
+    display: grid;
+    grid-template-columns: 280px 1fr 320px;
+    grid-template-rows: 64px 1fr;
+    height: 100vh;
+    gap: 0;
+  }
+
+  /* Header */
+  header {
+    grid-column: 1 / -1;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 24px;
+    border-bottom: 1px solid var(--border);
+    background: rgba(5,8,16,0.9);
+    backdrop-filter: blur(20px);
+  }
+  .logo {
+    font-family: 'Syne', sans-serif;
+    font-weight: 800; font-size: 18px;
+    letter-spacing: -0.5px;
+    display: flex; align-items: center; gap: 10px;
+  }
+  .logo-icon {
+    width: 32px; height: 32px;
+    border: 1.5px solid var(--accent);
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    position: relative; overflow: hidden;
+  }
+  .logo-icon::before {
+    content: '';
+    position: absolute; inset: 2px;
+    background: linear-gradient(135deg, var(--accent), transparent);
+    border-radius: 5px; opacity: 0.3;
+  }
+  .logo-icon svg { width: 16px; height: 16px; fill: var(--accent); position: relative; z-index: 1; }
+  .logo-text { color: var(--text); }
+  .logo-sub { color: var(--text-muted); font-size: 11px; font-weight: 400; }
+
+  .header-status {
+    display: flex; align-items: center; gap: 20px;
+    font-size: 11px; color: var(--text-muted);
+  }
+  .status-badge {
+    display: flex; align-items: center; gap: 6px;
+    padding: 4px 10px;
+    border: 1px solid var(--border);
+    border-radius: 20px;
+  }
+  .status-dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--accent2);
+    animation: pulse 2s ease-in-out infinite;
+  }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+
+  /* Left sidebar */
+  .sidebar {
+    border-right: 1px solid var(--border);
+    padding: 24px 16px;
+    display: flex; flex-direction: column; gap: 6px;
+    overflow-y: auto;
+    background: rgba(10,15,30,0.5);
+  }
+  .sidebar-section { font-size: 10px; color: var(--text-dim); letter-spacing: 1.5px; text-transform: uppercase; padding: 12px 8px 6px; }
+  .nav-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 12px; border-radius: 8px;
+    font-size: 12px; color: var(--text-muted);
+    cursor: pointer; transition: all 0.2s; border: 1px solid transparent;
+    user-select: none;
+  }
+  .nav-item:hover { background: var(--surface2); color: var(--text); border-color: var(--border); }
+  .nav-item.active {
+    background: rgba(99,179,237,0.08);
+    color: var(--accent);
+    border-color: rgba(99,179,237,0.2);
+  }
+  .nav-item svg { width: 14px; height: 14px; flex-shrink: 0; opacity: 0.7; }
+  .nav-item.active svg { opacity: 1; }
+
+  /* Signal monitor in sidebar */
+  .signal-monitor { margin-top: 16px; padding: 12px; background: var(--surface); border-radius: 10px; border: 1px solid var(--border); }
+  .signal-title { font-size: 10px; color: var(--text-dim); letter-spacing: 1px; text-transform: uppercase; margin-bottom: 12px; }
+  .signal-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .signal-label { font-size: 10px; color: var(--text-muted); width: 70px; flex-shrink: 0; }
+  .signal-bar-wrap { flex: 1; height: 3px; background: var(--surface2); border-radius: 2px; overflow: hidden; }
+  .signal-bar { height: 100%; border-radius: 2px; transition: width 0.3s ease; background: var(--accent); }
+  .signal-bar.good { background: var(--accent2); }
+  .signal-bar.warn { background: var(--accent3); }
+  .signal-bar.bad { background: var(--danger); }
+  .signal-val { font-size: 9px; color: var(--text-dim); width: 28px; text-align: right; flex-shrink: 0; }
+
+  /* Main content */
+  .main { padding: 32px; overflow-y: auto; display: flex; flex-direction: column; }
+
+  /* Panels */
+  .panel {
+    display: none; animation: fadeIn 0.3s ease;
+  }
+  .panel.active { display: flex; flex-direction: column; gap: 24px; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+
+  .panel-title {
+    font-family: 'Syne', sans-serif;
+    font-size: 28px; font-weight: 800;
+    letter-spacing: -1px;
+    line-height: 1;
+    display: flex; align-items: center; gap: 12px;
+  }
+  .panel-title span { color: var(--accent); }
+  .panel-sub { font-size: 12px; color: var(--text-muted); margin-top: 4px; }
+
+  /* Form elements */
+  .form-group { display: flex; flex-direction: column; gap: 6px; }
+  .form-label { font-size: 10px; color: var(--text-dim); letter-spacing: 1px; text-transform: uppercase; }
+  .form-input {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 16px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px; color: var(--text);
+    transition: all 0.2s; outline: none;
+    width: 100%;
+  }
+  .form-input:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(99,179,237,0.1);
+    background: var(--surface2);
+  }
+  .form-input::placeholder { color: var(--text-dim); }
+
+  /* Phase stepper */
+  .phase-stepper { display: flex; gap: 0; position: relative; }
+  .phase-stepper::before {
+    content: ''; position: absolute; top: 14px; left: 14px; right: 14px;
+    height: 1px; background: var(--border); z-index: 0;
+  }
+  .phase-step {
+    flex: 1; display: flex; flex-direction: column; align-items: center; gap: 8px;
+    position: relative; z-index: 1;
+  }
+  .phase-dot {
+    width: 28px; height: 28px; border-radius: 50%;
+    border: 1.5px solid var(--border);
+    background: var(--surface);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 10px; color: var(--text-dim);
+    transition: all 0.3s;
+  }
+  .phase-step.done .phase-dot { border-color: var(--accent2); background: rgba(72,187,120,0.15); color: var(--accent2); }
+  .phase-step.active .phase-dot { border-color: var(--accent); background: rgba(99,179,237,0.15); color: var(--accent); box-shadow: 0 0 15px rgba(99,179,237,0.3); }
+  .phase-label { font-size: 10px; color: var(--text-dim); }
+  .phase-step.active .phase-label { color: var(--accent); }
+  .phase-step.done .phase-label { color: var(--accent2); }
+
+  /* Cards */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+    transition: border-color 0.2s;
+  }
+  .card:hover { border-color: var(--border-glow); }
+  .card-title { font-size: 11px; color: var(--text-muted); letter-spacing: 0.5px; margin-bottom: 12px; display: flex; align-items: center; gap: 6px; }
+
+  /* Capture task area */
+  .capture-task {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 20px;
+    margin: 12px 0;
+    border-left: 3px solid var(--accent);
+    position: relative;
+    overflow: hidden;
+  }
+  .capture-task::before {
+    content: 'CAPTURE ACTIVE';
+    position: absolute; top: 8px; right: 12px;
+    font-size: 9px; color: var(--accent); letter-spacing: 1px;
+    animation: blink 1.5s ease-in-out infinite;
+  }
+  @keyframes blink { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+  .capture-task p { font-size: 13px; color: var(--text-muted); line-height: 1.6; margin-bottom: 12px; }
+  .capture-task strong { color: var(--text); }
+
+  /* Timer ring */
+  .timer-ring-wrap { display: flex; align-items: center; gap: 16px; margin-top: 12px; }
+  .timer-ring { position: relative; width: 48px; height: 48px; flex-shrink: 0; }
+  .timer-ring svg { transform: rotate(-90deg); }
+  .timer-ring-bg { fill: none; stroke: var(--surface2); stroke-width: 3; }
+  .timer-ring-fill { fill: none; stroke: var(--accent); stroke-width: 3; stroke-dasharray: 126; stroke-dashoffset: 126; transition: stroke-dashoffset 1s linear; stroke-linecap: round; }
+  .timer-num { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 500; color: var(--accent); }
+  .timer-label { font-size: 11px; color: var(--text-muted); }
+  .timer-label strong { color: var(--text); font-size: 12px; display: block; margin-bottom: 2px; }
+
+  /* Buttons */
+  .btn {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 12px 24px; border-radius: 8px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px; font-weight: 500;
+    cursor: pointer; transition: all 0.2s;
+    border: 1px solid transparent; outline: none;
+    letter-spacing: 0.5px;
+    user-select: none;
+  }
+  .btn-primary {
+    background: rgba(99,179,237,0.15);
+    border-color: rgba(99,179,237,0.4);
+    color: var(--accent);
+  }
+  .btn-primary:hover {
+    background: rgba(99,179,237,0.25);
+    border-color: var(--accent);
+    box-shadow: 0 0 20px rgba(99,179,237,0.2);
+    transform: translateY(-1px);
+  }
+  .btn-primary:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+  .btn-success {
+    background: rgba(72,187,120,0.15);
+    border-color: rgba(72,187,120,0.4);
+    color: var(--accent2);
+  }
+  .btn-success:hover { background: rgba(72,187,120,0.25); border-color: var(--accent2); box-shadow: 0 0 20px rgba(72,187,120,0.2); }
+  .btn-ghost { background: transparent; border-color: var(--border); color: var(--text-muted); }
+  .btn-ghost:hover { border-color: var(--border-glow); color: var(--text); }
+  .btn-full { width: 100%; justify-content: center; }
+  .btn-lg { padding: 14px 32px; font-size: 13px; }
+
+  /* Progress bar */
+  .progress-wrap { height: 4px; background: var(--surface2); border-radius: 2px; overflow: hidden; }
+  .progress-bar { height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent2)); border-radius: 2px; transition: width 0.4s ease; width: 0%; }
+
+  /* Score display */
+  .score-display {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    padding: 32px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    position: relative; overflow: hidden;
+  }
+  .score-display.success { border-color: rgba(72,187,120,0.4); box-shadow: 0 0 40px rgba(72,187,120,0.1); }
+  .score-display.failure { border-color: rgba(252,129,129,0.4); box-shadow: 0 0 40px rgba(252,129,129,0.1); }
+  .score-display.medium { border-color: rgba(246,173,85,0.4); box-shadow: 0 0 40px rgba(246,173,85,0.1); }
+  .score-circle {
+    width: 120px; height: 120px; position: relative; margin-bottom: 16px;
+  }
+  .score-circle svg { transform: rotate(-90deg); }
+  .score-circle-bg { fill: none; stroke: var(--surface2); stroke-width: 8; }
+  .score-circle-fill { fill: none; stroke-width: 8; stroke-dasharray: 314; stroke-dashoffset: 314; stroke-linecap: round; transition: stroke-dashoffset 1.5s cubic-bezier(0.4,0,0.2,1); }
+  .score-num {
+    position: absolute; inset: 0;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    font-family: 'Syne', sans-serif; font-weight: 800; font-size: 32px;
+  }
+  .score-num span { font-size: 11px; font-family: 'JetBrains Mono', monospace; font-weight: 400; color: var(--text-muted); }
+  .risk-badge {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 6px 16px; border-radius: 20px;
+    font-size: 11px; letter-spacing: 1px; text-transform: uppercase;
+    margin-bottom: 12px;
+  }
+  .risk-badge.low { background: rgba(72,187,120,0.1); border: 1px solid rgba(72,187,120,0.3); color: var(--accent2); }
+  .risk-badge.medium { background: rgba(246,173,85,0.1); border: 1px solid rgba(246,173,85,0.3); color: var(--accent3); }
+  .risk-badge.high { background: rgba(252,129,129,0.1); border: 1px solid rgba(252,129,129,0.3); color: var(--danger); }
+
+  /* Breakdown grid */
+  .breakdown-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; width: 100%; margin-top: 16px; }
+  .breakdown-item {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px;
+    text-align: center;
+  }
+  .breakdown-score { font-family: 'Syne', sans-serif; font-size: 20px; font-weight: 700; }
+  .breakdown-max { font-size: 11px; color: var(--text-dim); }
+  .breakdown-label { font-size: 10px; color: var(--text-muted); margin-top: 4px; letter-spacing: 0.5px; }
+
+  /* System log */
+  .log-area {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+    max-height: 220px;
+    overflow-y: auto;
+    font-size: 11px;
+  }
+  .log-area::-webkit-scrollbar { width: 4px; }
+  .log-area::-webkit-scrollbar-track { background: transparent; }
+  .log-area::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+  .log-entry { display: flex; gap: 10px; padding: 4px 0; border-bottom: 1px solid rgba(99,179,237,0.05); }
+  .log-time { color: var(--text-dim); flex-shrink: 0; }
+  .log-msg { color: var(--text-muted); }
+  .log-msg.success { color: var(--accent2); }
+  .log-msg.warn { color: var(--accent3); }
+  .log-msg.error { color: var(--danger); }
+  .log-msg.info { color: var(--accent); }
+
+  /* Right panel */
+  .right-panel {
+    border-left: 1px solid var(--border);
+    padding: 20px 16px;
+    display: flex; flex-direction: column; gap: 16px;
+    overflow-y: auto;
+    background: rgba(10,15,30,0.5);
+  }
+  .metric-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px;
+  }
+  .metric-header { font-size: 10px; color: var(--text-dim); letter-spacing: 1px; text-transform: uppercase; margin-bottom: 8px; }
+  .metric-value { font-family: 'Syne', sans-serif; font-size: 22px; font-weight: 700; color: var(--text); }
+  .metric-sub { font-size: 10px; color: var(--text-muted); margin-top: 2px; }
+
+  /* Network viz */
+  .network-chart { height: 60px; position: relative; overflow: hidden; }
+  .network-chart canvas { width: 100%; height: 100%; }
+
+  /* Fed status */
+  .fed-status { display: flex; flex-direction: column; gap: 10px; }
+  .fed-row { display: flex; justify-content: space-between; align-items: center; font-size: 11px; }
+  .fed-key { color: var(--text-muted); }
+  .fed-val { color: var(--accent); font-weight: 500; }
+  .fed-val.green { color: var(--accent2); }
+  .fed-val.orange { color: var(--accent3); }
+
+  /* Challenge modal */
+  .modal-overlay {
+    position: fixed; inset: 0; z-index: 100;
+    background: rgba(5,8,16,0.9); backdrop-filter: blur(10px);
+    display: none; align-items: center; justify-content: center;
+  }
+  .modal-overlay.show { display: flex; }
+  .modal {
+    background: var(--surface);
+    border: 1px solid var(--border-glow);
+    border-radius: 16px;
+    padding: 32px; max-width: 480px; width: 90%;
+    box-shadow: 0 0 80px rgba(99,179,237,0.15);
+    animation: modalIn 0.3s cubic-bezier(0.34,1.56,0.64,1);
+  }
+  @keyframes modalIn { from { transform: scale(0.9) translateY(20px); opacity: 0; } to { transform: scale(1) translateY(0); opacity: 1; } }
+  .modal-title { font-family: 'Syne', sans-serif; font-size: 20px; font-weight: 800; margin-bottom: 8px; }
+  .modal-sub { font-size: 12px; color: var(--text-muted); margin-bottom: 24px; line-height: 1.6; }
+  .challenge-sentence {
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 8px; padding: 16px;
+    font-size: 14px; color: var(--accent3);
+    margin-bottom: 16px; line-height: 1.8;
+    font-style: italic; letter-spacing: 0.3px;
+  }
+
+  /* Toast */
+  .toast {
+    position: fixed; bottom: 24px; right: 24px; z-index: 200;
+    background: var(--surface2);
+    border: 1px solid var(--border-glow);
+    border-radius: 10px; padding: 14px 20px;
+    font-size: 12px; color: var(--text);
+    transform: translateX(120%); transition: transform 0.3s cubic-bezier(0.34,1.56,0.64,1);
+    max-width: 320px;
+    display: flex; align-items: center; gap: 10px;
+  }
+  .toast.show { transform: translateX(0); }
+  .toast.success { border-color: rgba(72,187,120,0.4); }
+  .toast.error { border-color: rgba(252,129,129,0.4); }
+
+  /* Scan line animation */
+  .scan-line {
+    position: fixed; left: 0; right: 0; height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(99,179,237,0.3), transparent);
+    animation: scanDown 6s linear infinite; pointer-events: none; z-index: 1;
+  }
+  @keyframes scanDown { from { top: 0; opacity: 0.5; } to { top: 100vh; opacity: 0; } }
+
+  /* Utility */
+  .flex { display: flex; }
+  .gap-8 { gap: 8px; }
+  .gap-12 { gap: 12px; }
+  .gap-16 { gap: 16px; }
+  .mt-4 { margin-top: 4px; }
+  .mt-8 { margin-top: 8px; }
+  .mt-16 { margin-top: 16px; }
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .text-muted { color: var(--text-muted); font-size: 11px; }
+  .text-accent { color: var(--accent); }
+  .text-success { color: var(--accent2); }
+  .text-warn { color: var(--accent3); }
+  .text-danger { color: var(--danger); }
+  .divider { height: 1px; background: var(--border); margin: 4px 0; }
+</style>
+</head>
+<body>
+
+<div id="cursor"></div>
+<div id="cursor-ring"></div>
+<div class="scan-line"></div>
+<div class="orb orb-1"></div>
+<div class="orb orb-2"></div>
+
+<div class="layout">
+  <!-- Header -->
+  <header>
+    <div class="logo">
+      <div class="logo-icon">
+        <svg viewBox="0 0 16 16"><path d="M8 1L1 4v4c0 4 3.5 7 7 7s7-3 7-7V4L8 1z"/></svg>
+      </div>
+      <div>
+        <div class="logo-text">NeuralAuth</div>
+        <div class="logo-sub">Behavioral Identity System v4</div>
+      </div>
+    </div>
+    <div class="header-status">
+      <div class="status-badge">
+        <div class="status-dot"></div>
+        <span>System Online</span>
+      </div>
+      <span id="header-time" style="color:var(--text-dim);font-size:11px;"></span>
+      <span id="header-user" style="color:var(--text-muted);font-size:11px;display:none;"></span>
+    </div>
+  </header>
+
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="sidebar-section">Navigation</div>
+    <div class="nav-item active" onclick="showPanel('register')">
+      <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 8A4 4 0 108 0a4 4 0 000 8zm0 1a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
+      Register Identity
+    </div>
+    <div class="nav-item" onclick="showPanel('login')">
+      <svg viewBox="0 0 16 16" fill="currentColor"><path d="M10 2H6a2 2 0 00-2 2v8a2 2 0 002 2h4a2 2 0 002-2V4a2 2 0 00-2-2zM5 8h6M9 6l2 2-2 2"/></svg>
+      Login
+    </div>
+    <div class="nav-item" onclick="showPanel('federation')">
+      <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 1a7 7 0 100 14A7 7 0 008 1zm0 2a5 5 0 110 10A5 5 0 018 3zm0 2a3 3 0 100 6 3 3 0 000-6z"/></svg>
+      Federation
+    </div>
+    <div class="nav-item" onclick="showPanel('analytics')">
+      <svg viewBox="0 0 16 16" fill="currentColor"><path d="M1 14V6h3v8H1zm4 0V2h3v12H5zm4 0V9h3v5H9zm4 0v-3h2v3h-2z"/></svg>
+      Analytics
+    </div>
+
+    <div class="sidebar-section">Live Signals</div>
+    <div class="signal-monitor">
+      <div class="signal-title">Behavioral Capture</div>
+      <div class="signal-row">
+        <span class="signal-label">Typing</span>
+        <div class="signal-bar-wrap"><div class="signal-bar" id="sb-typing" style="width:0%"></div></div>
+        <span class="signal-val" id="sv-typing">—</span>
+      </div>
+      <div class="signal-row">
+        <span class="signal-label">Mouse</span>
+        <div class="signal-bar-wrap"><div class="signal-bar good" id="sb-mouse" style="width:0%"></div></div>
+        <span class="signal-val" id="sv-mouse">—</span>
+      </div>
+      <div class="signal-row">
+        <span class="signal-label">Decision</span>
+        <div class="signal-bar-wrap"><div class="signal-bar warn" id="sb-decision" style="width:0%"></div></div>
+        <span class="signal-val" id="sv-decision">—</span>
+      </div>
+      <div class="signal-row">
+        <span class="signal-label">Network</span>
+        <div class="signal-bar-wrap"><div class="signal-bar" id="sb-network" style="width:0%"></div></div>
+        <span class="signal-val" id="sv-network">—</span>
+      </div>
+      <div class="signal-row">
+        <span class="signal-label">Keystrokes</span>
+        <div class="signal-bar-wrap"><div class="signal-bar good" id="sb-keys" style="width:0%"></div></div>
+        <span class="signal-val" id="sv-keys">0</span>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Main Content -->
+  <main class="main">
+
+    <!-- REGISTER PANEL -->
+    <div class="panel active" id="panel-register">
+      <div>
+        <div class="panel-title">Register <span>Identity</span></div>
+        <div class="panel-sub">30–40 second behavioral calibration — three-phase biometric capture</div>
+      </div>
+
+      <!-- Phase Stepper -->
+      <div class="phase-stepper" id="reg-stepper">
+        <div class="phase-step active" id="step-0">
+          <div class="phase-dot">01</div>
+          <div class="phase-label">Calm</div>
+        </div>
+        <div class="phase-step" id="step-1">
+          <div class="phase-dot">02</div>
+          <div class="phase-label">Cognitive</div>
+        </div>
+        <div class="phase-step" id="step-2">
+          <div class="phase-dot">03</div>
+          <div class="phase-label">Controlled</div>
+        </div>
+        <div class="phase-step" id="step-3">
+          <div class="phase-dot">04</div>
+          <div class="phase-label">Complete</div>
+        </div>
+      </div>
+
+      <!-- Phase 0: Account details -->
+      <div id="reg-phase-0">
+        <div class="capture-task">
+          <p>Phase 1 of 3 — <strong>Calm Typing Baseline</strong></p>
+          <p>Type your email and username naturally. Don't rush or concentrate — just type as you normally would.</p>
+        </div>
+        <div class="grid-2">
+          <div class="form-group">
+            <label class="form-label">Email Address</label>
+            <input class="form-input" type="email" id="reg-email" placeholder="you@example.com" autocomplete="off">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Username</label>
+            <input class="form-input" type="text" id="reg-username" placeholder="your_username" autocomplete="off">
+          </div>
+        </div>
+        <div class="mt-16">
+          <button class="btn btn-primary btn-full btn-lg" onclick="startRegPhase1()">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1a7 7 0 100 14A7 7 0 008 1zm0 2a5 5 0 110 10A5 5 0 018 3zm0 2v4l2.5 2.5-1 1L7 9.5V5h1z"/></svg>
+            Begin Calibration
+          </button>
+        </div>
+      </div>
+
+      <!-- Phase 1: Cognitive -->
+      <div id="reg-phase-1" style="display:none;">
+        <div class="capture-task">
+          <p>Phase 2 of 3 — <strong>Cognitive Typing Baseline</strong></p>
+          <p>Read the sentence below and type it exactly as shown. Think while you type — this measures your cognitive processing pattern.</p>
+          <div style="margin-top:12px;padding:12px;background:rgba(99,179,237,0.05);border-radius:6px;border:1px solid rgba(99,179,237,0.15);">
+            <span style="color:var(--accent3);font-size:13px;" id="cog-sentence">The secure system verifies identity through behavioral signals that cannot be replicated.</span>
+          </div>
+          <div class="timer-ring-wrap" style="margin-top:16px;">
+            <div class="timer-ring">
+              <svg width="48" height="48" viewBox="0 0 48 48">
+                <circle class="timer-ring-bg" cx="24" cy="24" r="20"/>
+                <circle class="timer-ring-fill" id="timer-ring-1" cx="24" cy="24" r="20"/>
+              </svg>
+              <div class="timer-num" id="timer-num-1">15</div>
+            </div>
+            <div class="timer-label">
+              <strong>15 seconds to type</strong>
+              Natural pace — no need to rush
+            </div>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Type the sentence above</label>
+          <input class="form-input" type="text" id="reg-cognitive" placeholder="Start typing the sentence..." autocomplete="off">
+        </div>
+        <div class="mt-16 flex gap-8">
+          <button class="btn btn-primary flex-1" onclick="submitRegPhase1()">Next Phase →</button>
+        </div>
+      </div>
+
+      <!-- Phase 2: Controlled -->
+      <div id="reg-phase-2" style="display:none;">
+        <div class="capture-task">
+          <p>Phase 3 of 3 — <strong>Controlled Precision Baseline</strong></p>
+          <p>Set your key carefully and deliberately. Slow, intentional typing is expected here.</p>
+        </div>
+        <div class="grid-2">
+          <div class="form-group">
+            <label class="form-label">Key</label>
+            <input class="form-input" type="password" id="reg-pass" placeholder="key" autocomplete="off">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Key</label>
+            <input class="form-input" type="password" id="reg-pass2" placeholder="Confirm key" autocomplete="off">
+          </div>
+        </div>
+        <div class="mt-16">
+          <button class="btn btn-success btn-full btn-lg" id="reg-submit-btn" onclick="submitRegistration()">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1a7 7 0 100 14A7 7 0 008 1zm-1 4l4 4-4 4-1-1 3-3-3-3 1-1z"/></svg>
+            Complete Registration
+          </button>
+        </div>
+      </div>
+
+      <!-- Phase 3: Done -->
+      <div id="reg-phase-3" style="display:none;">
+        <div class="card" style="text-align:center;padding:32px;border-color:rgba(72,187,120,0.3);">
+          <div style="font-size:48px;margin-bottom:16px;">🔐</div>
+          <div style="font-family:'Syne',sans-serif;font-size:22px;font-weight:800;color:var(--accent2);">Identity Registered</div>
+          <div class="text-muted mt-8">Behavioral DNA captured across 3 contexts. Your identity fingerprint is now active.</div>
+          <div class="grid-2 mt-16">
+            <div class="breakdown-item">
+              <div class="breakdown-score text-accent" id="reg-calm-q">—</div>
+              <div class="breakdown-label">Calm Baseline</div>
+            </div>
+            <div class="breakdown-item">
+              <div class="breakdown-score text-warn" id="reg-cog-q">—</div>
+              <div class="breakdown-label">Cognitive Baseline</div>
+            </div>
+          </div>
+          <button class="btn btn-primary btn-full mt-16" onclick="showPanel('login')">→ Proceed to Login</button>
+        </div>
+      </div>
+
+      <!-- System Log -->
+      <div>
+        <div class="card-title">System Log</div>
+        <div class="log-area" id="reg-log">
+          <div class="log-entry"><span class="log-time">--:--:--</span><span class="log-msg info">NeuralAuth v4 ready. Awaiting registration.</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- LOGIN PANEL -->
+   <div class="panel" id="panel-login">
+  <div>
+    <div class="panel-title">Verify <span>Identity</span></div>
+    <div class="panel-sub">Three-phase behavioral authentication</div>
+  </div>
+
+  <div style="max-width:500px;display:flex;flex-direction:column;gap:20px;">
+
+    <!-- Phase 1 -->
+    <div id="login-phase-1">
+      <div class="capture-task">
+        <p><strong>Phase 1 — Email Pattern</strong></p>
+        <p>Type your email naturally.</p>
+      </div>
+
+      <input class="form-input" type="email" id="login-email" placeholder="you@example.com" autocomplete="off">
+
+      <button class="btn btn-primary btn-full mt-16"
+        onclick="goToLoginPhase2()">Next →</button>
+    </div>
+
+    <!-- Phase 2 -->
+    <div id="login-phase-2" style="display:none;">
+      <div class="capture-task">
+        <p><strong>Phase 2 — Password Pattern</strong></p>
+        <p>Type your password normally.</p>
+      </div>
+
+      <input class="form-input" type="password" id="login-password" placeholder="key" autocomplete="off">
+
+      <button class="btn btn-primary btn-full mt-16"
+        onclick="goToLoginPhase3()">Next →</button>
+    </div>
+
+    <!-- Phase 3 -->
+    <div id="login-phase-3" style="display:none;">
+      <div class="capture-task">
+        <p><strong>Phase 3 — Cognitive Pattern</strong></p>
+        <p>Type the sentence below naturally.</p>
+        <div style="margin-top:10px;color:var(--accent3);">
+          Secure systems rely on behavioral intelligence.
+        </div>
+      </div>
+
+      <input class="form-input" type="text" id="login-cognitive" autocomplete="off">
+
+      <button class="btn btn-success btn-full btn-lg mt-16"
+        onclick="submitLogin()">Authenticate</button>
+    </div>
+
+  </div>
+
+  <div class="mt-16">
+    <div class="card-title">Login Log</div>
+    <div class="log-area" id="login-log"></div>
+  </div>
+</div>
+    <!-- FEDERATION PANEL -->
+    <div class="panel" id="panel-federation">
+      <div>
+        <div class="panel-title">Federated <span>Learning</span></div>
+        <div class="panel-sub">Raw data stays on device — only model weight deltas are transmitted</div>
+      </div>
+
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-title">
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="var(--accent)"><path d="M8 1a7 7 0 100 14A7 7 0 008 1zm0 2a5 5 0 110 10A5 5 0 018 3z"/></svg>
+            Global Model Status
+          </div>
+          <div class="fed-status" id="fed-status-display">
+            <div class="fed-row"><span class="fed-key">Version</span><span class="fed-val" id="fed-version">—</span></div>
+            <div class="fed-row"><span class="fed-key">Contributors</span><span class="fed-val green" id="fed-contributors">—</span></div>
+            <div class="fed-row"><span class="fed-key">Pending Updates</span><span class="fed-val orange" id="fed-pending">—</span></div>
+            <div class="fed-row"><span class="fed-key">Last Updated</span><span class="fed-val" id="fed-updated">—</span></div>
+          </div>
+          <div class="mt-16 progress-wrap">
+            <div class="progress-bar" id="fed-progress"></div>
+          </div>
+          <div class="text-muted mt-4" id="fed-progress-label">Waiting for status...</div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">Privacy Guarantee</div>
+          <div style="display:flex;flex-direction:column;gap:8px;font-size:11px;">
+            <div style="display:flex;align-items:center;gap:8px;"><span style="color:var(--accent2);">✓</span><span style="color:var(--text-muted);">Raw keystrokes stay on device</span></div>
+            <div style="display:flex;align-items:center;gap:8px;"><span style="color:var(--accent2);">✓</span><span style="color:var(--text-muted);">Mouse coordinates never transmitted</span></div>
+            <div style="display:flex;align-items:center;gap:8px;"><span style="color:var(--accent2);">✓</span><span style="color:var(--text-muted);">Only weight delta arrays sent</span></div>
+            <div style="display:flex;align-items:center;gap:8px;"><span style="color:var(--accent2);">✓</span><span style="color:var(--text-muted);">Model version number transmitted</span></div>
+            <div style="display:flex;align-items:center;gap:8px;"><span style="color:var(--danger);">✗</span><span style="color:var(--text-muted);">Raw behavioral values never leave</span></div>
+            <div style="display:flex;align-items:center;gap:8px;"><span style="color:var(--danger);">✗</span><span style="color:var(--text-muted);">No identifiable data on server</span></div>
+          </div>
+          <button class="btn btn-ghost btn-full mt-16" onclick="loadFedStatus()">Refresh Status</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Federated Data Flow</div>
+        <div style="display:flex;align-items:center;gap:0;font-size:11px;flex-wrap:wrap;gap:8px;">
+          <div style="padding:8px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;text-align:center;">
+            <div style="color:var(--accent);font-size:10px;letter-spacing:1px;">DEVICE</div>
+            <div style="color:var(--text-muted);margin-top:4px;">Behavior Events</div>
+          </div>
+          <span style="color:var(--text-dim);">→ train locally →</span>
+          <div style="padding:8px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;text-align:center;">
+            <div style="color:var(--accent3);font-size:10px;letter-spacing:1px;">LOCAL</div>
+            <div style="color:var(--text-muted);margin-top:4px;">Weight Deltas</div>
+          </div>
+          <span style="color:var(--text-dim);">→ transmit only →</span>
+          <div style="padding:8px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;text-align:center;">
+            <div style="color:var(--accent2);font-size:10px;letter-spacing:1px;">SERVER</div>
+            <div style="color:var(--text-muted);margin-top:4px;">FedAvg Aggregate</div>
+          </div>
+          <span style="color:var(--text-dim);">→ update global →</span>
+          <div style="padding:8px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;text-align:center;">
+            <div style="color:var(--accent);font-size:10px;letter-spacing:1px;">TRUST</div>
+            <div style="color:var(--text-muted);margin-top:4px;">Global Model</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ANALYTICS PANEL -->
+    <div class="panel" id="panel-analytics">
+      <div>
+        <div class="panel-title">Identity <span>Analytics</span></div>
+        <div class="panel-sub">Behavioral profile confidence and scoring history</div>
+      </div>
+      <div class="grid-2">
+        <div class="metric-card">
+          <div class="metric-header">Identity Confidence</div>
+          <div class="metric-value text-accent" id="anal-confidence">—</div>
+          <div class="metric-sub">Grows with each trusted session</div>
+          <div class="progress-wrap mt-8"><div class="progress-bar" id="anal-conf-bar"></div></div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-header">Dynamic Threshold</div>
+          <div class="metric-value text-warn" id="anal-threshold">—</div>
+          <div class="metric-sub">Adjusts based on your history</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-header">Trusted Logins</div>
+          <div class="metric-value text-success" id="anal-trusted">—</div>
+          <div class="metric-sub">Consecutive trusted sessions</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-header">Risk Events</div>
+          <div class="metric-value text-danger" id="anal-risk">—</div>
+          <div class="metric-sub">Flagged sessions total</div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">Recent Login Risk Events</div>
+        <div class="log-area" id="anal-log">
+          <div class="log-entry"><span class="log-time">--:--:--</span><span class="log-msg">No session history yet. Complete a login to see analytics.</span></div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- Right Panel -->
+  <aside class="right-panel">
+    <div class="metric-card">
+      <div class="metric-header">Network Latency</div>
+      <div class="metric-value" id="rp-latency">— ms</div>
+      <div class="metric-sub" id="rp-jitter">Jitter: — ms</div>
+      <div class="network-chart mt-8">
+        <canvas id="net-canvas" width="280" height="60"></canvas>
+      </div>
+    </div>
+
+    <div class="metric-card">
+      <div class="metric-header">Session Signals</div>
+      <div class="fed-status">
+        <div class="fed-row"><span class="fed-key">Key Events</span><span class="fed-val" id="rp-keys">0</span></div>
+        <div class="fed-row"><span class="fed-key">Mouse Moves</span><span class="fed-val" id="rp-mouse">0</span></div>
+        <div class="fed-row"><span class="fed-key">Avg IKI</span><span class="fed-val" id="rp-iki">—</span></div>
+        <div class="fed-row"><span class="fed-key">Avg Hold</span><span class="fed-val" id="rp-hold">—</span></div>
+        <div class="fed-row"><span class="fed-key">Mouse Vel</span><span class="fed-val" id="rp-mvel">—</span></div>
+      </div>
+    </div>
+
+    <div class="metric-card">
+      <div class="metric-header">Device Fingerprint</div>
+      <div class="fed-status">
+        <div class="fed-row"><span class="fed-key">Hash</span><span class="fed-val" id="rp-device" style="font-size:10px;">—</span></div>
+        <div class="fed-row"><span class="fed-key">Screen</span><span class="fed-val" id="rp-screen">—</span></div>
+        <div class="fed-row"><span class="fed-key">TZ</span><span class="fed-val" id="rp-tz">—</span></div>
+      </div>
+    </div>
+
+    <div class="metric-card">
+      <div class="metric-header">Last Trust Score</div>
+      <div class="metric-value" id="rp-score">—</div>
+      <div class="fed-status mt-8">
+        <div class="fed-row"><span class="fed-key">ML Score</span><span class="fed-val" id="rp-ml">—</span></div>
+        <div class="fed-row"><span class="fed-key">Risk Level</span><span class="fed-val" id="rp-risk">—</span></div>
+        <div class="fed-row"><span class="fed-key">Decision</span><span class="fed-val" id="rp-decision">—</span></div>
+      </div>
+    </div>
+  </aside>
+</div>
+
+<!-- Challenge Modal -->
+<div class="modal-overlay" id="challenge-modal">
+  <div class="modal">
+    <div class="modal-title">⚠ Identity Challenge</div>
+    <div class="modal-sub">Medium risk detected. Please type the sentence below naturally to confirm your identity. Your typing rhythm will be compared to your baseline.</div>
+    <div class="challenge-sentence" id="challenge-sentence-text">The system secures access through continuous behavioral verification.</div>
+    <div class="form-group">
+      <label class="form-label">Type the sentence above</label>
+      <input class="form-input" type="text" id="challenge-input" placeholder="Type here..." autocomplete="off">
+    </div>
+    <div class="flex gap-8 mt-16">
+      <button class="btn btn-primary flex-1" onclick="submitChallenge()">Verify Identity</button>
+      <button class="btn btn-ghost" onclick="closeChallenge()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<script>
+// ═══════════════════════════════════════════════════════════
+// MICRO CAPTURE ENGINE — Real behavioral signal collection
+// ═══════════════════════════════════════════════════════════
+const MC = {
+  keys: [],        // {key, press_ts, release_ts, slow, field}
+  mouse: [],       // {x, y, ts, vx, vy}
+  scroll: [],      // {delta, ts}
+  clicks: [],      // {x, y, ts, element}
+  hover_start: null,
+  focus_start: {},
+  latency: [],     // {ts, latency_ms}
+  isSlowNow: false,
+  lastMousePos: null, lastMouseTime: null,
+  sessionStart: Date.now(),
+  active: false,
+  challengeKeys: [],
+
+  start() { this.active = true; this.log('MC: Capture started'); },
+  stop() { this.active = false; },
+  reset() { this.keys=[]; this.mouse=[]; this.scroll=[]; this.clicks=[]; this.latency=[]; this.challengeKeys=[]; this.active=false; },
+
+  // Build feature vector for backend
+  features(phase='login') {
+    if(this.keys.length < 2) return null;
+    
+    // Inter-key intervals
+    const sorted = [...this.keys].sort((a,b) => a.press_ts - b.press_ts);
+    const ikis = [];
+    for(let i=1; i<sorted.length; i++) {
+      const iki = sorted[i].press_ts - sorted[i-1].press_ts;
+      if(iki > 0 && iki < 2000) ikis.push(iki);
+    }
+    
+    // Key hold times
+    const holds = this.keys
+      .filter(k => k.release_ts > k.press_ts)
+      .map(k => k.release_ts - k.press_ts)
+      .filter(h => h > 0 && h < 500);
+    
+    // Mouse velocity
+    const mvels = [];
+    for(let i=1; i<this.mouse.length; i++) {
+      const dt = this.mouse[i].ts - this.mouse[i-1].ts;
+      const dx = this.mouse[i].x - this.mouse[i-1].x;
+      const dy = this.mouse[i].y - this.mouse[i-1].y;
+      if(dt > 0) mvels.push(Math.sqrt(dx*dx+dy*dy)/dt*1000);
+    }
+    
+    // Click intervals
+    const cints = [];
+    for(let i=1; i<this.clicks.length; i++) {
+      const ci = this.clicks[i].ts - this.clicks[i-1].ts;
+      if(ci > 0 && ci < 5000) cints.push(ci);
+    }
+    
+    // Network
+    const lats = this.latency.map(l=>l.latency_ms);
+    const latMean = lats.length ? lats.reduce((a,b)=>a+b,0)/lats.length : 100;
+    const latJitter = lats.length > 1 ? Math.sqrt(lats.map(l=>(l-latMean)**2).reduce((a,b)=>a+b,0)/lats.length) : 0;
+    
+    // Behavior under slowness
+    const slowKeys = this.keys.filter(k=>k.slow).length;
+    const busRatio = this.keys.length > 0 ? 1 - (slowKeys/this.keys.length*0.5) : 1.0;
+    
+    // Session elapsed
+    const elapsed = (Date.now() - this.sessionStart) / 1000;
+    
+    // Device fingerprint
+    const fp = this.deviceFingerprint();
+    
+    // Scroll depth
+    const maxScroll = this.scroll.length ? Math.max(...this.scroll.map(s=>s.delta)) : 0;
+    
+    return {
+      // Raw event arrays (engineered on backend too, but we pre-compute)
+      typing_speed: ikis.length > 0 ? (1000 / (ikis.reduce((a,b)=>a+b,0)/ikis.length)) : 0,
+      key_hold_time: holds.length > 0 ? holds.reduce((a,b)=>a+b,0)/holds.length : 120,
+      mouse_velocity: mvels.length > 0 ? mvels.reduce((a,b)=>a+b,0)/mvels.length : 0,
+      click_interval: cints.length > 0 ? cints.reduce((a,b)=>a+b,0)/cints.length : 600,
+      decision_time: this.hover_start ? Date.now()-this.hover_start : 800,
+      scroll_depth: maxScroll,
+      network_latency: latMean,
+      behavior_under_slowness: Math.max(0, Math.min(1, busRatio)),
+      time_of_day: new Date().getHours(),
+      
+      // Micro-features (Z-score inputs)
+      iki_mean: ikis.length ? ikis.reduce((a,b)=>a+b,0)/ikis.length : 200,
+      iki_std: ikis.length > 1 ? Math.sqrt(ikis.map(i=>(i-(ikis.reduce((a,b)=>a+b,0)/ikis.length))**2).reduce((a,b)=>a+b,0)/ikis.length) : 50,
+      hold_mean: holds.length ? holds.reduce((a,b)=>a+b,0)/holds.length : 120,
+      hold_std: holds.length > 1 ? Math.sqrt(holds.map(h=>(h-(holds.reduce((a,b)=>a+b,0)/holds.length))**2).reduce((a,b)=>a+b,0)/holds.length) : 30,
+      mvel_mean: mvels.length ? mvels.reduce((a,b)=>a+b,0)/mvels.length : 300,
+      mvel_std: mvels.length > 1 ? Math.sqrt(mvels.map(v=>(v-(mvels.reduce((a,b)=>a+b,0)/mvels.length))**2).reduce((a,b)=>a+b,0)/mvels.length) : 100,
+      lat_mean: latMean,
+      lat_jitter: latJitter,
+      lat_probes: lats.length,
+      slow_key_ratio: this.keys.length > 0 ? slowKeys/this.keys.length : 0,
+      
+      device_hash: fp.hash,
+      location_hash: this.locationHash(),
+      
+      // Context
+      phase: phase,
+      key_count: this.keys.length,
+      mouse_count: this.mouse.length,
+      session_duration_ms: Date.now() - this.sessionStart,
+    };
+  },
+
+  deviceFingerprint() {
+    const raw = [
+      navigator.userAgent, navigator.language,
+      screen.width + 'x' + screen.height, screen.colorDepth,
+      Intl.DateTimeFormat().resolvedOptions().timeZone,
+      navigator.hardwareConcurrency
+    ].join('|');
+    let hash = 0;
+    for(let i=0; i<raw.length; i++) { hash = ((hash<<5)-hash)+raw.charCodeAt(i); hash|=0; }
+    return { hash: (hash>>>0).toString(16).padStart(8,'0').repeat(4), raw };
+  },
+
+  locationHash() {
+    const raw = Intl.DateTimeFormat().resolvedOptions().timeZone + '|' + navigator.language;
+    let hash = 0;
+    for(let i=0; i<raw.length; i++) { hash = ((hash<<5)-hash)+raw.charCodeAt(i); hash|=0; }
+    return (hash>>>0).toString(16).padStart(8,'0').repeat(4);
+  },
+
+  log(msg) { console.log('[MC]', msg); }
+};
+
+// Attach global event listeners
+document.addEventListener('keydown', e => {
+  if(!MC.active) return;
+  const meanLat = MC.latency.length ? MC.latency.slice(-5).reduce((a,b)=>a+b.latency_ms,0)/Math.min(5,MC.latency.length) : 0;
+  const isS = meanLat > 0 && MC.latency.length > 0 && MC.latency[MC.latency.length-1].latency_ms > meanLat*2;
+  MC.keys.push({ key: e.key, press_ts: Date.now(), release_ts: 0, slow: isS, field: document.activeElement?.id||'' });
+  updateSidebarSignals();
+});
+document.addEventListener('keyup', e => {
+  const last = [...MC.keys].reverse().find(k => k.key === e.key && k.release_ts === 0);
+  if(last) last.release_ts = Date.now();
+});
+document.addEventListener('mousemove', e => {
+  if(!MC.active) return;
+  const now = Date.now();
+  if(MC.lastMousePos) {
+    const dx = e.clientX - MC.lastMousePos.x, dy = e.clientY - MC.lastMousePos.y;
+    const dt = now - MC.lastMouseTime;
+    if(dt > 10) MC.mouse.push({ x:e.clientX, y:e.clientY, ts:now, vx:dx/dt*1000, vy:dy/dt*1000 });
+  }
+  MC.lastMousePos = {x:e.clientX,y:e.clientY}; MC.lastMouseTime = now;
+  updateSidebarSignals();
+});
+document.addEventListener('click', e => {
+  if(!MC.active) return;
+  MC.clicks.push({ x:e.clientX, y:e.clientY, ts:Date.now(), element:e.target?.tagName });
+});
+document.addEventListener('scroll', () => {
+  if(!MC.active) return;
+  MC.scroll.push({ delta: window.scrollY, ts: Date.now() });
+});
+
+// Hover detection for decision time
+document.querySelectorAll('.btn').forEach(btn => {
+  btn.addEventListener('mouseenter', () => { MC.hover_start = Date.now(); });
+});
+
+// ═══════════════════════════════════════════════════════════
+// NETWORK PROBING
+// ═══════════════════════════════════════════════════════════
+const netHistory = [];
+async function probeNetwork() {
+  try {
+    const t0 = performance.now();
+    await fetch('/api/auth/federated/status/?_t='+Date.now(), {method:'HEAD', cache:'no-store'});
+    const lat = Math.round(performance.now() - t0);
+    netHistory.push(lat);
+    if(netHistory.length > 60) netHistory.shift();
+    MC.latency.push({ ts: Date.now(), latency_ms: lat });
+    
+    const mean = netHistory.reduce((a,b)=>a+b,0)/netHistory.length;
+    const jitter = netHistory.length > 1 ? Math.sqrt(netHistory.map(l=>(l-mean)**2).reduce((a,b)=>a+b,0)/netHistory.length) : 0;
+    MC.isSlowNow = lat > mean * 2.0 && mean > 0;
+    
+    document.getElementById('rp-latency').textContent = lat + ' ms';
+    document.getElementById('rp-jitter').textContent = 'Jitter: ' + Math.round(jitter) + ' ms';
+    
+    updateSidebarSignals();
+    drawNetCanvas();
+  } catch(e) {}
+}
+setInterval(probeNetwork, 1500);
+probeNetwork();
+
+function drawNetCanvas() {
+  const c = document.getElementById('net-canvas');
+  const ctx = c.getContext('2d');
+  const w = c.width, h = c.height;
+  ctx.clearRect(0,0,w,h);
+  if(netHistory.length < 2) return;
+  const max = Math.max(...netHistory, 100);
+  ctx.strokeStyle = 'rgba(99,179,237,0.6)';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  netHistory.forEach((v,i) => {
+    const x = (i/(netHistory.length-1))*w;
+    const y = h - (v/max)*h*0.9;
+    i===0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y);
+  });
+  ctx.stroke();
+  ctx.strokeStyle = 'rgba(99,179,237,0.1)';
+  ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(w,h); ctx.lineTo(0,h); ctx.lineTo(0,0); ctx.stroke();
+}
+
+// ═══════════════════════════════════════════════════════════
+// SIDEBAR SIGNAL UPDATER
+// ═══════════════════════════════════════════════════════════
+function updateSidebarSignals() {
+  const f = MC.features('live');
+  if(!f) return;
+  
+  const ts = Math.min(100, (f.typing_speed / 8) * 100);
+  const ms = Math.min(100, (f.mouse_velocity / 800) * 100);
+  const ds = Math.min(100, (f.decision_time / 2000) * 100);
+  const ns = Math.min(100, 100 - (f.network_latency / 500) * 100);
+  const ks = Math.min(100, (MC.keys.length / 30) * 100);
+  
+  setBar('typing', ts, f.typing_speed.toFixed(1));
+  setBar('mouse', ms, Math.round(f.mouse_velocity));
+  setBar('decision', ds, Math.round(f.decision_time));
+  setBar('network', ns, Math.round(f.network_latency));
+  setBar('keys', ks, MC.keys.length);
+  
+  document.getElementById('rp-keys').textContent = MC.keys.length;
+  document.getElementById('rp-mouse').textContent = MC.mouse.length;
+  if(f.iki_mean) document.getElementById('rp-iki').textContent = Math.round(f.iki_mean) + 'ms';
+  if(f.hold_mean) document.getElementById('rp-hold').textContent = Math.round(f.hold_mean) + 'ms';
+  if(f.mvel_mean) document.getElementById('rp-mvel').textContent = Math.round(f.mvel_mean) + 'px/s';
+}
+
+function setBar(id, pct, val) {
+  document.getElementById('sb-'+id).style.width = pct + '%';
+  document.getElementById('sv-'+id).textContent = val;
+}
+
+// ═══════════════════════════════════════════════════════════
+// DEVICE INFO
+// ═══════════════════════════════════════════════════════════
+(function() {
+  const fp = MC.deviceFingerprint();
+  document.getElementById('rp-device').textContent = fp.hash.substring(0,16)+'...';
+  document.getElementById('rp-screen').textContent = screen.width+'×'+screen.height;
+  document.getElementById('rp-tz').textContent = Intl.DateTimeFormat().resolvedOptions().timeZone.split('/')[1]||'UTC';
+})();
+
+// ═══════════════════════════════════════════════════════════
+// REGISTRATION FLOW
+// ═══════════════════════════════════════════════════════════
+let regData = { phase0: null, phase1: null, phase2: null };
+let regTimerInterval = null;
+
+function startRegPhase1() {
+  const email = document.getElementById('reg-email').value.trim();
+  const username = document.getElementById('reg-username').value.trim();
+  if(!email || !username) { showToast('Please fill email and username', 'error'); return; }
+  
+  MC.reset(); MC.sessionStart = Date.now(); MC.start();
+  regData.email = email; regData.username = username;
+  
+  document.getElementById('reg-phase-0').style.display = 'none';
+  document.getElementById('reg-phase-1').style.display = 'block';
+  setStep(1);
+  addLog('reg-log', 'Phase 1 complete. Starting cognitive capture...', 'success');
+  
+  // Capture calm phase data from what was typed
+  setTimeout(() => {
+    regData.phase0 = MC.features('calm');
+    MC.reset(); MC.sessionStart = Date.now(); MC.start();
+    startTimer(15, 'timer-ring-1', 'timer-num-1');
+  }, 200);
+}
+
+function startTimer(secs, ringId, numId) {
+  let remaining = secs;
+  const circ = 126;
+  if(regTimerInterval) clearInterval(regTimerInterval);
+  regTimerInterval = setInterval(() => {
+    remaining--;
+    const offset = circ - (circ * (secs - remaining) / secs);
+    document.getElementById(ringId).style.strokeDashoffset = offset;
+    document.getElementById(numId).textContent = remaining;
+    if(remaining <= 0) clearInterval(regTimerInterval);
+  }, 1000);
+}
+
+function submitRegPhase1() {
+  const cogText = document.getElementById('reg-cognitive').value.trim();
+  if(!cogText) { showToast('Please type the sentence', 'error'); return; }
+  regData.phase1 = MC.features('cognitive');
+  regData.cogText = cogText;
+  clearInterval(regTimerInterval);
+  
+  MC.reset(); MC.sessionStart = Date.now(); MC.start();
+  document.getElementById('reg-phase-1').style.display = 'none';
+  document.getElementById('reg-phase-2').style.display = 'block';
+  setStep(2);
+  addLog('reg-log', 'Phase 2 complete. Starting controlled capture...', 'success');
+}
+
+async function submitRegistration() {
+  const pass = document.getElementById('reg-pass').value;
+  const pass2 = document.getElementById('reg-pass2').value;
+  if(pass !== pass2) { showToast('Passwords do not match', 'error'); return; }
+  if(!pass || pass.length < 6) { showToast('Password must be at least 6 characters', 'error'); return; }
+  
+  regData.phase2 = MC.features('controlled');
+  regData.password = pass;
+  MC.stop();
+  
+  const btn = document.getElementById('reg-submit-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" class="spin"><path d="M8 1a7 7 0 100 14A7 7 0 008 1zm0 2a5 5 0 110 10A5 5 0 018 3z" opacity=".3"/><path d="M8 1a7 7 0 017 7h-2A5 5 0 008 3V1z"/></svg> Processing...';
+  
+  addLog('reg-log', 'Sending calibration data to server...', 'info');
+  
+  try {
+    const payload = {
+      email: regData.email,
+      username: regData.username,
+      password: regData.password,
+      calm_features: regData.phase0,
+      cognitive_features: regData.phase1,
+      controlled_features: regData.phase2,
+      cognitive_text: regData.cogText,
+      device_hash: MC.deviceFingerprint().hash,
+      location_hash: MC.locationHash()
+    };
+    
+    const res = await fetch('/api/auth/register/', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json', 'X-CSRFToken': getCookie('csrftoken')},
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+    
+    if(res.ok) {
+      addLog('reg-log', 'Registration successful. Identity profile created.', 'success');
+      setStep(3);
+      document.getElementById('reg-phase-2').style.display = 'none';
+      document.getElementById('reg-phase-3').style.display = 'block';
+      document.getElementById('reg-calm-q').textContent = data.calm_quality ? (data.calm_quality*100).toFixed(0)+'%' : 'OK';
+      document.getElementById('reg-cog-q').textContent = data.cognitive_quality ? (data.cognitive_quality*100).toFixed(0)+'%' : 'OK';
+      showToast('Identity registered successfully!', 'success');
+    } else {
+      addLog('reg-log', 'Error: ' + (data.error || data.message || 'Registration failed'), 'error');
+      showToast(data.error || 'Registration failed', 'error');
+      btn.disabled = false;
+      btn.innerHTML = 'Complete Registration';
+    }
+  } catch(e) {
+    addLog('reg-log', 'Network error: ' + e.message, 'error');
+    showToast('Network error. Check server connection.', 'error');
+    btn.disabled = false;
+    btn.innerHTML = 'Complete Registration';
+  }
+}
+
+function setStep(n) {
+  for(let i=0; i<=3; i++) {
+    const el = document.getElementById('step-'+i);
+    el.classList.remove('active','done');
+    if(i < n) el.classList.add('done');
+    if(i === n) el.classList.add('active');
+  }
+}
+// ═══════════════════════════════════════════════════════════
+// LOGIN FLOW (3-PHASE VERSION)
+// ═══════════════════════════════════════════════════════════
+
+let loginData = {};
+
+function goToLoginPhase2() {
+  const email = document.getElementById('login-email').value.trim();
+  if (!email) { showToast("Enter email","error"); return; }
+
+  loginData.email = email;
+  loginData.phase1 = MC.features('login_email');
+
+  MC.reset(); 
+  MC.sessionStart = Date.now(); 
+  MC.start();
+
+  document.getElementById('login-phase-1').style.display='none';
+  document.getElementById('login-phase-2').style.display='block';
+
+  addLog('login-log',"Email pattern captured","success");
+}
+
+function goToLoginPhase3() {
+  const pass = document.getElementById('login-password').value;
+  if (!pass) { showToast("Enter password","error"); return; }
+
+  loginData.password = pass;
+  loginData.phase2 = MC.features('login_password');
+
+  MC.reset(); 
+  MC.sessionStart = Date.now(); 
+  MC.start();
+
+  document.getElementById('login-phase-2').style.display='none';
+  document.getElementById('login-phase-3').style.display='block';
+
+  addLog('login-log',"Password pattern captured","success");
+}
+
+async function submitLogin() {
+
+  const cognitive = document.getElementById('login-cognitive').value.trim();
+  if (!cognitive) { showToast("Complete cognitive step","error"); return; }
+
+  loginData.phase3 = MC.features('login_cognitive');
+  loginData.cognitive_text = cognitive;
+
+  MC.stop();
+
+  addLog('login-log',"Sending authentication request...","info");
+
+  try {
+
+    const res = await fetch('/api/auth/login/', {
+      method: 'POST',
+      headers: {
+        'Content-Type':'application/json',
+        'X-CSRFToken': getCookie('csrftoken')
+      },
+      body: JSON.stringify({
+        email: loginData.email,
+        password: loginData.password,
+        email_features: loginData.phase1,
+        password_features: loginData.phase2,
+        cognitive_features: loginData.phase3,
+        cognitive_text: loginData.cognitive_text
+      })
+    });
+
+    const data = await res.json();
+
+    if (res.ok) {
+      addLog('login-log',"Access granted. Trust: "+data.trust_score,"success");
+      showToast("Access Granted","success");
+    } else {
+      addLog('login-log',"Access denied","error");
+      showToast("Access Denied","error");
+    }
+
+  } catch(e) {
+    addLog('login-log',"Network error: "+e.message,"error");
+    showToast("Server error","error");
+  }
+}
+// ═══════════════════════════════════════════════════════════
+// FEDERATION
+// ═══════════════════════════════════════════════════════════
+async function loadFedStatus() {
+  try {
+    const res = await fetch('/api/auth/federated/status/');
+    const data = await res.json();
+    document.getElementById('fed-version').textContent = 'v' + (data.current_version||1);
+    document.getElementById('fed-contributors').textContent = data.total_contributors || 0;
+    document.getElementById('fed-pending').textContent = data.pending_updates || 0;
+    document.getElementById('fed-updated').textContent = data.updated_at ? new Date(data.updated_at).toLocaleDateString() : 'Never';
+    const min = data.min_updates_to_aggregate || 3;
+    const pending = data.pending_updates || 0;
+    const pct = Math.min(100, (pending/min)*100);
+    document.getElementById('fed-progress').style.width = pct + '%';
+    document.getElementById('fed-progress-label').textContent = `${pending}/${min} updates until next aggregation`;
+  } catch(e) {
+    document.getElementById('fed-progress-label').textContent = 'Status unavailable';
+  }
+}
+
+async function loadAnalytics() {
+  try {
+    const email = document.getElementById('login-email').value.trim();
+    if(!email) return;
+    const res = await fetch('/api/auth/profile/?email='+encodeURIComponent(email));
+    const data = await res.json();
+    
+    if(data.identity_confidence !== undefined) {
+      const conf = data.identity_confidence;
+      document.getElementById('anal-confidence').textContent = (conf*100).toFixed(1)+'%';
+      document.getElementById('anal-conf-bar').style.width = (conf*100)+'%';
+    }
+    if(data.dynamic_threshold) document.getElementById('anal-threshold').textContent = data.dynamic_threshold.toFixed(1);
+    if(data.trusted_login_count !== undefined) document.getElementById('anal-trusted').textContent = data.trusted_login_count;
+    if(data.consecutive_deviations !== undefined) document.getElementById('anal-risk').textContent = data.consecutive_deviations;
+    
+    if(data.recent_events?.length) {
+      const logEl = document.getElementById('anal-log');
+      logEl.innerHTML = '';
+      data.recent_events.forEach(ev => {
+        const t = new Date(ev.created_at).toLocaleTimeString();
+        const cls = ev.action_taken==='GRANTED'?'success':ev.action_taken==='CHALLENGED'?'warn':'error';
+        addLogToEl(logEl, `${ev.action_taken} — Score:${ev.trust_score} | Risk:${ev.risk_level} | Confidence:${ev.confidence_at_time?.toFixed(2)}`, cls, t);
+      });
+    }
+  } catch(e) {}
+}
+
+// ═══════════════════════════════════════════════════════════
+// UI UTILITIES
+// ═══════════════════════════════════════════════════════════
+function showPanel(name) {
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById('panel-'+name).classList.add('active');
+  document.querySelector(`.nav-item[onclick="showPanel('${name}')"]`)?.classList.add('active');
+  
+  if(name === 'federation') loadFedStatus();
+  if(name === 'analytics') loadAnalytics();
+  if(name === 'login') { MC.reset(); loginCaptureActive = false; }
+}
+
+function addLog(id, msg, type='') {
+  addLogToEl(document.getElementById(id), msg, type);
+}
+
+function addLogToEl(el, msg, type='', customTime=null) {
+  const t = customTime || new Date().toLocaleTimeString('en-US',{hour12:false,hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  const div = document.createElement('div');
+  div.className = 'log-entry';
+  div.innerHTML = `<span class="log-time">${t}</span><span class="log-msg ${type}">${msg}</span>`;
+  el.appendChild(div);
+  el.scrollTop = el.scrollHeight;
+}
+
+let toastTimer;
+function showToast(msg, type='') {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast show ' + type;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 3500);
+}
+
+function getCookie(name) {
+  const v = document.cookie.match('(^|;) ?'+name+'=([^;]*)(;|$)');
+  return v ? v[2] : '';
+}
+
+// Cursor
+const cur = document.getElementById('cursor');
+const curRing = document.getElementById('cursor-ring');
+document.addEventListener('mousemove', e => {
+  cur.style.left = (e.clientX-4)+'px';
+  cur.style.top = (e.clientY-4)+'px';
+  curRing.style.left = e.clientX+'px';
+  curRing.style.top = e.clientY+'px';
+});
+
+// Clock
+function updateClock() {
+  document.getElementById('header-time').textContent = new Date().toLocaleTimeString('en-US',{hour12:false});
+}
+setInterval(updateClock, 1000); updateClock();
+
+// CSS spin animation
+const style = document.createElement('style');
+style.textContent = '@keyframes spin { to { transform: rotate(360deg); } } .spin { animation: spin 1s linear infinite; }';
+document.head.appendChild(style);
+
+// Hover on buttons
+document.addEventListener('mouseenter', e => {
+  if(e.target?.classList?.contains('btn')) {
+    cur.style.transform = 'scale(2)';
+  }
+}, true);
+document.addEventListener('mouseleave', e => {
+  if(e.target?.classList?.contains('btn')) {
+    cur.style.transform = 'scale(1)';
+  }
+}, true);
+</script>
+</body>
+</html>

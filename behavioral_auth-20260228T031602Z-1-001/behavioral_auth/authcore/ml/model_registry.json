@@ -1,0 +1,15 @@
+{
+  "current_version": 1,
+  "history": [
+    {
+      "version": 1,
+      "created_at": "init",
+      "contributors": 0,
+      "source": "train_model.py"
+    }
+  ],
+  "pending_updates": 0,
+  "min_updates_to_aggregate": 3,
+  "total_contributors": 0,
+  "updated_at": null
+}
